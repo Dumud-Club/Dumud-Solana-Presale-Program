@@ -5,7 +5,7 @@ use anchor_spl::token::{self, Transfer, TokenAccount, Token, Mint};
 
 declare_id!("A4DjbJ7AVgKCcWAZpFZPUmVQvgcAEcJwGtrxGrhEHZYP");
 
-const TOKENS_PER_USER: u64 = 50_000 * LAMPORTS_PER_SOL; // for 2 SOL
+const TOKENS_PER_USER: u64 = 75_000 * LAMPORTS_PER_SOL; // for 3 SOL
 const TOKENS_PER_SOL: u64 = 25_000 * LAMPORTS_PER_SOL;
 
 #[program]
@@ -53,17 +53,17 @@ pub mod presale_contract {
 
         let saled_amount = &mut ctx.accounts.saled_amount;
 
+        // 1. check if it's availalbe to sell(sol balance and remained amount are valid)        
+        if saled_amount.amount >= TOKENS_PER_USER {
+            return Err(ErrorCode::SaleFull.into());
+        }
+
         let remained_amount: u64 = TOKENS_PER_USER - saled_amount.amount;
         let requested_amount: u64 = TOKENS_PER_SOL / LAMPORTS_PER_SOL * amount;
         let mut real_amount = if remained_amount >= requested_amount {requested_amount} else {remained_amount};
         real_amount = if ctx.accounts.vault.amount >= real_amount { real_amount } else {ctx.accounts.vault.amount};
         let extra_amount: u64 = (requested_amount - real_amount) / (TOKENS_PER_SOL / LAMPORTS_PER_SOL);
 
-        // 1. check if it's availalbe to sell(sol balance and remained amount are valid)        
-        if saled_amount.amount >= TOKENS_PER_USER {
-            return Err(ErrorCode::SaleFull.into());
-        }
- 
         // 2. update status(saled.amount)
         {
             saled_amount.amount += real_amount;    
@@ -178,14 +178,14 @@ pub struct Buy<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
     #[account(mut)]
-    pub user_token_account: Account<'info, TokenAccount>,
+    pub user_token_account: Box<Account<'info, TokenAccount>>,
     /// CHECK: This is not dangerous because this account is only recipent of SOL
     #[account(mut)]
     pub recipent: AccountInfo<'info>,
     #[account(mut)]
     pub pool: Account<'info, Pool>,
     #[account(mut)]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }

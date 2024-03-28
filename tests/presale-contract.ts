@@ -8,7 +8,6 @@ import {
   createMint,
   mintTo,
 } from "@solana/spl-token";
-import { max } from "bn.js";
 
 describe("presale-contract", () => {
   // Configure the client to use the local cluster.
@@ -32,9 +31,9 @@ describe("presale-contract", () => {
   let userTokenKey, poolKey, vaultKey;
   const USER_INITIAL_BALANCE = 15 * anchor.web3.LAMPORTS_PER_SOL;
   const OWNER_INITIAL_BALANCE = 1 * anchor.web3.LAMPORTS_PER_SOL;
-  const PRESALE_TOKEN_BALANCE = 125000 * anchor.web3.LAMPORTS_PER_SOL;
+  const PRESALE_TOKEN_BALANCE = 175000 * anchor.web3.LAMPORTS_PER_SOL;
   const TOKEN_PER_SOL = 25000 * anchor.web3.LAMPORTS_PER_SOL;
-  const MAX_SOL_PER_USER = 2 * anchor.web3.LAMPORTS_PER_SOL;
+  const MAX_SOL_PER_USER = 3 * anchor.web3.LAMPORTS_PER_SOL;
 
   beforeEach(async () => {
     // create owner, user and airdrop sol
@@ -219,9 +218,9 @@ describe("presale-contract", () => {
     );
   });
 
-  // buy tokens for 2.5 SOL, should refund 0.5 SOL, send 50,000 TOKENS
+  // buy tokens for 3.5 SOL, should refund 0.5 SOL, send 75,000 TOKENS
   it("scenario B", async () => {
-    const BUY_BALANCE = new anchor.BN(2.5 * anchor.web3.LAMPORTS_PER_SOL);
+    const BUY_BALANCE = new anchor.BN(3.5 * anchor.web3.LAMPORTS_PER_SOL);
 
     await initVault();
     // try to test mint to vault
@@ -275,11 +274,11 @@ describe("presale-contract", () => {
     );
   });
 
-  // buy tokens for 1 SOL first, 1.5 SOL again,
-  // should refund 0.5 SOL, send 25,000 TOKENS twice
+  // buy tokens for 1 SOL first, 2.5 SOL again,
+  // should refund 0.5 SOL, send 25,000, 50,000 TOKENS
   it("scenario C", async () => {
     const BUY_BALANCE1 = new anchor.BN(1 * anchor.web3.LAMPORTS_PER_SOL);
-    const BUY_BALANCE2 = new anchor.BN(1.5 * anchor.web3.LAMPORTS_PER_SOL);
+    const BUY_BALANCE2 = new anchor.BN(2.5 * anchor.web3.LAMPORTS_PER_SOL);
 
     await initVault();
     // try to test mint to vault
@@ -334,8 +333,8 @@ describe("presale-contract", () => {
     );
   });
 
-  // userA and userB buy 50,000 TOKEN with 2 SOL
-  // At this time, vault have 25,000 TOKEN, user pay 2 SOL and refund 1 SOL
+  // userA and userB buy 75,000 TOKEN with 3 SOL
+  // At this time, vault have 25,000 TOKEN, user pay 3 SOL and refund 2 SOL
   it("scenario D", async () => {
     await initVault();
     // try to test mint to vault
@@ -355,7 +354,7 @@ describe("presale-contract", () => {
     assert.ok(saledUserAccount.user.equals(user.publicKey), "invalid user");
     assert.ok(saledUserAccount.amount.eq(new anchor.BN(0)), "invalid amount");
 
-    // userA buy tokens with 2 SOL
+    // userA buy tokens with 3 SOL
     const userA = anchor.web3.Keypair.generate();
     await airdrop(userA.publicKey, USER_INITIAL_BALANCE);
     const [saleUserAKey] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -376,7 +375,7 @@ describe("presale-contract", () => {
       new anchor.BN(MAX_SOL_PER_USER)
     );
 
-    // userB buy tokens with 2 SOL
+    // userB buy tokens with 3 SOL
     const userB = anchor.web3.Keypair.generate();
     await airdrop(userB.publicKey, USER_INITIAL_BALANCE);
     const [saleUserBKey] = anchor.web3.PublicKey.findProgramAddressSync(
