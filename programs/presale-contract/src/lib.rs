@@ -1,5 +1,4 @@
 use std::str::FromStr;
-
 use anchor_lang::{prelude::*, solana_program::{self, native_token::LAMPORTS_PER_SOL}};
 use anchor_spl::token::{self, Transfer, TokenAccount, Token, Mint};
 
@@ -11,21 +10,64 @@ const TOKENS_PER_SOL: u64 = 25_000 * LAMPORTS_PER_SOL;
 #[program]
 pub mod presale_contract {
     use anchor_lang::solana_program::{native_token::LAMPORTS_PER_SOL, system_instruction};
+    use anchor_spl::associated_token::get_associated_token_address;
 
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        require!(ctx.accounts.mint.mint_authority.is_some(), ErrorCode::Unauthorized);
+        require_keys_eq!(ctx.accounts.mint.mint_authority.unwrap(), *ctx.accounts.payer.key, ErrorCode::Unauthorized);
         let pool = &mut ctx.accounts.pool;
         pool.owner = *ctx.accounts.payer.key;
         pool.mint = ctx.accounts.mint.key();
         pool.bump_seed = ctx.bumps.pool;
+        pool.sale_enabled = true;
+        Ok(())
+    }
+
+    pub fn set_sale(ctx: Context<SetSale>, new_value: bool) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        pool.sale_enabled = new_value;
+        Ok(())
+    }
+
+    pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
+
+        require!(!ctx.accounts.pool.sale_enabled, ErrorCode::SaleAvailable);
+
+        let cho_token_address = get_associated_token_address(
+            &Pubkey::from_str("4FSwJ68KUcUjUSj9xqqXDhZQqidxJQ8R8PrKuQLs5RSp").unwrap(),
+            &ctx.accounts.mint.key(),
+       );       
+        require_keys_eq!(
+            ctx.accounts.recipent_token_account.key(), 
+            cho_token_address.key(), 
+            ErrorCode::UnmatchedRecipent
+        );
+        require!(ctx.accounts.vault.amount > 0, ErrorCode::VaultIsEmpty);        
+
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.vault.to_account_info(),
+            to: ctx.accounts.recipent_token_account.to_account_info(),
+            authority: ctx.accounts.pool.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+    
+        token::transfer(
+            CpiContext::new_with_signer(
+                cpi_program, 
+                cpi_accounts,
+                &[&[b"pool".as_ref(), ctx.accounts.pool.owner.as_ref(), ctx.accounts.mint.key().as_ref(), &[ctx.accounts.pool.bump_seed]]]
+            ),
+            ctx.accounts.vault.amount)?;
+
         Ok(())
     }
 
     pub fn init_user(ctx: Context<Create>) -> Result<()> {
         let saled_amount = &mut ctx.accounts.saled_account;
         saled_amount.user = *ctx.accounts.user.key;
-        saled_amount.amount = 0;
+        saled_amount.amount = 0;        
 
         Ok(())
     }
@@ -51,6 +93,8 @@ pub mod presale_contract {
             ErrorCode::UnmatchedToken,
         );
 
+        require!(ctx.accounts.pool.sale_enabled, ErrorCode::SaleNotAvailable);
+
         let saled_amount = &mut ctx.accounts.saled_amount;
 
         // 1. check if it's availalbe to sell(sol balance and remained amount are valid)        
@@ -73,7 +117,7 @@ pub mod presale_contract {
         {        
             let transfer_instruction = system_instruction::transfer(
                 &ctx.accounts.saled_amount.user,
-                &Pubkey::from_str("4FSwJ68KUcUjUSj9xqqXDhZQqidxJQ8R8PrKuQLs5RSp").unwrap(),
+                &ctx.accounts.recipent.key(),
                 if extra_amount > 0 { amount - extra_amount } else { amount },
             );
             solana_program::program::invoke_signed(
@@ -122,6 +166,7 @@ pub struct Pool {
     pub owner: Pubkey,
     pub mint: Pubkey,
     pub bump_seed: u8,
+    pub sale_enabled: bool,
 }
 
 #[derive(Accounts)]
@@ -149,6 +194,16 @@ pub struct Initialize<'info>{
       )]
     pub vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SetSale<'info>{
+    /// Payer of rent
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut)]
+    pub pool: Account<'info, Pool>,
     pub system_program: Program<'info, System>,
 }
 
@@ -190,6 +245,23 @@ pub struct Buy<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct Withdraw<'info> {
+    /// Payer of rent
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+    #[account(mut)]
+    pub recipent_token_account: Box<Account<'info, TokenAccount>>,
+    #[account(mut)]
+    pub pool: Account<'info, Pool>,
+    #[account(mut)]
+    pub vault: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("You are not authorized to perform this action.")]
@@ -202,6 +274,12 @@ pub enum ErrorCode {
     UnmatchedRecipent,
     #[msg("Token doesn't match")]
     UnmatchedToken,
+    #[msg("Sale is not available")]
+    SaleNotAvailable,
+    #[msg("Sale is available")]
+    SaleAvailable,
+    #[msg("Vault is empty")]
+    VaultIsEmpty,
 }
 
 #[derive(Clone)]

@@ -28,9 +28,9 @@ describe("presale-contract", () => {
   );
 
   let saleUserKey;
-  let userTokenKey, poolKey, vaultKey;
+  let choTokenKey, userTokenKey, poolKey, vaultKey;
   const USER_INITIAL_BALANCE = 15 * anchor.web3.LAMPORTS_PER_SOL;
-  const OWNER_INITIAL_BALANCE = 1 * anchor.web3.LAMPORTS_PER_SOL;
+  const OWNER_INITIAL_BALANCE = 2 * anchor.web3.LAMPORTS_PER_SOL;
   const PRESALE_TOKEN_BALANCE = 175000 * anchor.web3.LAMPORTS_PER_SOL;
   const TOKEN_PER_SOL = 25000 * anchor.web3.LAMPORTS_PER_SOL;
   const MAX_SOL_PER_USER = 3 * anchor.web3.LAMPORTS_PER_SOL;
@@ -73,6 +73,13 @@ describe("presale-contract", () => {
       user.publicKey
     );
 
+    choTokenKey = await createAccount(
+      provider.connection,
+      owner,
+      mintKey,
+      choPubkey
+    );
+
     // userTokenKey = await createAssociatedTokenAccount(
     //   provider.connection,
     //   owner,
@@ -82,7 +89,7 @@ describe("presale-contract", () => {
   });
 
   it("should work to initialize vault", async () => {
-    await initVault();
+    await initVault(owner);
     // try to test mint to vault
     await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
     let vaultBalance = await provider.connection.getTokenAccountBalance(
@@ -95,8 +102,129 @@ describe("presale-contract", () => {
     );
   });
 
+  it("should faile to initialize vault by user", async () => {
+    // create pool & vault by user
+    [poolKey] = await anchor.web3.PublicKey.findProgramAddressSync(
+      [poolSeed, user.publicKey.toBuffer(), mintKey.toBuffer()],
+      presaleProgram.programId
+    );
+
+    [vaultKey] = await anchor.web3.PublicKey.findProgramAddressSync(
+      [vaultSeed, poolKey.toBuffer()],
+      presaleProgram.programId
+    );
+    try {
+      await initVault(user);
+      assert.ok(false);
+    } catch(_err) {
+      assert.isTrue(_err instanceof anchor.AnchorError);
+      const err: anchor.AnchorError = _err;
+      assert.ok(err.error.errorCode.number == 6000);
+      assert.ok(err.error.errorCode.code == "Unauthorized");
+    }
+  });
+
+  it("should work to set_sale by owner", async () => {
+    await initVault(owner);
+    let pool = await presaleProgram.account.pool.fetch(poolKey);
+    assert.ok(pool.saleEnabled, "saleEnabled should be true");
+    await setSale(false, owner);
+    pool = await presaleProgram.account.pool.fetch(poolKey);
+    assert.ok(!pool.saleEnabled, "saleEnabled should be false");
+
+    // test buy
+    {
+      const BUY_BALANCE = new anchor.BN(MAX_SOL_PER_USER);
+
+      // try to test mint to vault
+      await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
+      await initUser(user, saleUserKey);
+      try {
+        await buy(user, saleUserKey, userTokenKey, BUY_BALANCE);
+        assert.ok(false);
+      } catch (_err) {
+        assert.isTrue(_err instanceof anchor.AnchorError);
+        const err: anchor.AnchorError = _err;
+        assert.ok(err.error.errorCode.number == 6005);
+        assert.ok(err.error.errorCode.code == "SaleNotAvailable");
+      }
+    }
+  });
+
+  it("should fail to set_sale by user", async () => {
+    await initVault(owner);
+    let pool = await presaleProgram.account.pool.fetch(poolKey);
+    assert.ok(pool.saleEnabled, "saleEnabled should be true");
+    try {
+      await setSale(false, user);
+      assert.ok(false);
+    } catch (_err) {
+      // will throw solana native error
+    }
+  });
+
+  it("should work to withdraw by owner when sale_enabled is false", async () => {
+    await initVault(owner);
+    await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
+    await setSale(false, owner);
+
+    let choTokenBalance = await provider.connection.getTokenAccountBalance(
+      choTokenKey
+    );
+    assert.ok(choTokenBalance.value.uiAmount == 0, "invalid cho token balance");
+
+    await withdraw(owner);
+
+    choTokenBalance = await provider.connection.getTokenAccountBalance(
+      choTokenKey
+    );
+    assert.ok(
+      choTokenBalance.value.uiAmount * anchor.web3.LAMPORTS_PER_SOL ==
+        PRESALE_TOKEN_BALANCE,
+      "invalid cho token balance"
+    );
+  });
+
+  it("should fail to withdraw by user", async () => {
+    await initVault(owner);
+    await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
+    await setSale(false, owner);
+
+    let choTokenBalance = await provider.connection.getTokenAccountBalance(
+      choTokenKey
+    );
+    assert.ok(choTokenBalance.value.uiAmount == 0, "invalid cho token balance");
+
+    try {
+      await withdraw(user);
+      assert.ok(false);
+    } catch (_err) {
+      // will throw solana native error
+    }
+  });
+
+  it("should fail to withdraw when sale_enabled is true", async () => {
+    await initVault(owner);
+    await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
+
+    let choTokenBalance = await provider.connection.getTokenAccountBalance(
+      choTokenKey
+    );
+    assert.ok(choTokenBalance.value.uiAmount == 0, "invalid cho token balance");
+
+    try {
+      await withdraw(owner);
+      assert.ok(false);
+    } catch (_err) {
+      assert.isTrue(_err instanceof anchor.AnchorError);
+      const err: anchor.AnchorError = _err;
+      assert.ok(err.error.errorCode.number == 6006);
+      assert.ok(err.error.errorCode.code == "SaleAvailable");
+    }
+  });
+
   it("should work to initialize user", async () => {
-    await initVault();
+    await initVault(owner);
     console.log(
       `User balance: ${
         (await provider.connection.getBalance(user.publicKey)) /
@@ -114,7 +242,7 @@ describe("presale-contract", () => {
   it("should work to buy", async () => {
     const BUY_BALANCE = new anchor.BN(MAX_SOL_PER_USER);
 
-    await initVault();
+    await initVault(owner);
     // try to test mint to vault
     await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
     let vaultBalance = await provider.connection.getTokenAccountBalance(
@@ -168,7 +296,7 @@ describe("presale-contract", () => {
   it("scenario A", async () => {
     const BUY_BALANCE = new anchor.BN(1 * anchor.web3.LAMPORTS_PER_SOL);
 
-    await initVault();
+    await initVault(owner);
     // try to test mint to vault
     await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
     let vaultBalance = await provider.connection.getTokenAccountBalance(
@@ -222,7 +350,7 @@ describe("presale-contract", () => {
   it("scenario B", async () => {
     const BUY_BALANCE = new anchor.BN(3.5 * anchor.web3.LAMPORTS_PER_SOL);
 
-    await initVault();
+    await initVault(owner);
     // try to test mint to vault
     await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
     let vaultBalance = await provider.connection.getTokenAccountBalance(
@@ -269,7 +397,8 @@ describe("presale-contract", () => {
     vaultBalance = await provider.connection.getTokenAccountBalance(vaultKey);
     assert.ok(
       vaultBalance.value.uiAmount * anchor.web3.LAMPORTS_PER_SOL ==
-        PRESALE_TOKEN_BALANCE - solToTokenAmount(new anchor.BN(MAX_SOL_PER_USER)).toNumber(),
+        PRESALE_TOKEN_BALANCE -
+          solToTokenAmount(new anchor.BN(MAX_SOL_PER_USER)).toNumber(),
       "invalid vault balance"
     );
   });
@@ -280,7 +409,7 @@ describe("presale-contract", () => {
     const BUY_BALANCE1 = new anchor.BN(1 * anchor.web3.LAMPORTS_PER_SOL);
     const BUY_BALANCE2 = new anchor.BN(2.5 * anchor.web3.LAMPORTS_PER_SOL);
 
-    await initVault();
+    await initVault(owner);
     // try to test mint to vault
     await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
     let vaultBalance = await provider.connection.getTokenAccountBalance(
@@ -328,7 +457,8 @@ describe("presale-contract", () => {
     vaultBalance = await provider.connection.getTokenAccountBalance(vaultKey);
     assert.ok(
       vaultBalance.value.uiAmount * anchor.web3.LAMPORTS_PER_SOL ==
-        PRESALE_TOKEN_BALANCE - solToTokenAmount(new anchor.BN(MAX_SOL_PER_USER)).toNumber(),
+        PRESALE_TOKEN_BALANCE -
+          solToTokenAmount(new anchor.BN(MAX_SOL_PER_USER)).toNumber(),
       "invalid vault balance"
     );
   });
@@ -336,7 +466,7 @@ describe("presale-contract", () => {
   // userA and userB buy 75,000 TOKEN with 3 SOL
   // At this time, vault have 25,000 TOKEN, user pay 3 SOL and refund 2 SOL
   it("scenario D", async () => {
-    await initVault();
+    await initVault(owner);
     // try to test mint to vault
     await sendTokenForPresale(BigInt(PRESALE_TOKEN_BALANCE));
     let vaultBalance = await provider.connection.getTokenAccountBalance(
@@ -438,18 +568,48 @@ describe("presale-contract", () => {
     );
   });
 
-  async function initVault() {
+  async function initVault(signer: anchor.web3.Keypair) {
     const tx = await presaleProgram.methods
       .initialize()
       .accounts({
-        payer: owner.publicKey,
+        payer: signer.publicKey,
         mint: mintKey,
         pool: poolKey,
         vault: vaultKey,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([owner])
+      .signers([signer])
+      .rpc();
+    await confirmTransaction(tx);
+  }
+
+  async function setSale(enabled: boolean, signer: anchor.web3.Keypair) {
+    const tx = await presaleProgram.methods
+      .setSale(enabled)
+      .accounts({
+        payer: owner.publicKey,
+        pool: poolKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([signer])
+      .rpc();
+    await confirmTransaction(tx);
+  }
+
+  async function withdraw(signer: anchor.web3.Keypair) {
+    const tx = await presaleProgram.methods
+      .withdraw()
+      .accounts({
+        payer: owner.publicKey,
+        mint: mintKey,
+        recipentTokenAccount: choTokenKey,
+        pool: poolKey,
+        vault: vaultKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([signer])
       .rpc();
     await confirmTransaction(tx);
   }
