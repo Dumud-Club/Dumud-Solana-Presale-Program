@@ -1,16 +1,16 @@
 use std::str::FromStr;
 use anchor_lang::{prelude::*, solana_program::{self, native_token::LAMPORTS_PER_SOL}};
-use anchor_spl::token::{self, Transfer, TokenAccount, Token, Mint};
+use anchor_spl::token::{self, Transfer, TokenAccount, Token, Mint, Burn};
 
 declare_id!("A4DjbJ7AVgKCcWAZpFZPUmVQvgcAEcJwGtrxGrhEHZYP");
 
 const TOKENS_PER_USER: u64 = 75_000 * LAMPORTS_PER_SOL; // for 3 SOL
 const TOKENS_PER_SOL: u64 = 25_000 * LAMPORTS_PER_SOL;
+const RECEIVER_ADDRESS: &str = "4FSwJ68KUcUjUSj9xqqXDhZQqidxJQ8R8PrKuQLs5RSp";
 
 #[program]
 pub mod presale_contract {
     use anchor_lang::solana_program::{native_token::LAMPORTS_PER_SOL, system_instruction};
-    use anchor_spl::associated_token::get_associated_token_address;
 
     use super::*;
 
@@ -31,29 +31,20 @@ pub mod presale_contract {
         Ok(())
     }
 
-    pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
+    pub fn burn(ctx: Context<BurnPresale>) -> Result<()> {
 
         require!(!ctx.accounts.pool.sale_enabled, ErrorCode::SaleAvailable);
 
-        let cho_token_address = get_associated_token_address(
-            &Pubkey::from_str("4FSwJ68KUcUjUSj9xqqXDhZQqidxJQ8R8PrKuQLs5RSp").unwrap(),
-            &ctx.accounts.mint.key(),
-       );       
-        require_keys_eq!(
-            ctx.accounts.recipent_token_account.key(), 
-            cho_token_address.key(), 
-            ErrorCode::UnmatchedRecipent
-        );
         require!(ctx.accounts.vault.amount > 0, ErrorCode::VaultIsEmpty);        
 
-        let cpi_accounts = Transfer {
+        let cpi_accounts = Burn {
+            mint: ctx.accounts.mint.to_account_info(),
             from: ctx.accounts.vault.to_account_info(),
-            to: ctx.accounts.recipent_token_account.to_account_info(),
             authority: ctx.accounts.pool.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
     
-        token::transfer(
+        token::burn(
             CpiContext::new_with_signer(
                 cpi_program, 
                 cpi_accounts,
@@ -64,26 +55,33 @@ pub mod presale_contract {
         Ok(())
     }
 
-    pub fn init_user(ctx: Context<Create>) -> Result<()> {
-        let saled_amount = &mut ctx.accounts.saled_account;
-        saled_amount.user = *ctx.accounts.user.key;
-        saled_amount.amount = 0;        
+    // pub fn init_user(ctx: Context<Create>) -> Result<()> {
+    //     let saled_amount = &mut ctx.accounts.saled_account;
+    //     saled_amount.user = *ctx.accounts.user.key;
+    //     saled_amount.amount = 0;        
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub fn buy(ctx: Context<Buy>, amount: u64) -> Result<()> {
-        // // check authority
-        // require_keys_eq!(
-        //     ctx.accounts.user.key(),
-        //     ctx.accounts.saled_amount.user,
-        //     ErrorCode::Unauthorized
-        // );
-        // This is will be done in declaration block of Buy
+
+        // if saled_amount isn't initialized, initialize it.
+        let saled_amount = &mut ctx.accounts.saled_amount;
+        if saled_amount.user == Pubkey::from_str("11111111111111111111111111111111").unwrap() {
+            saled_amount.user = *ctx.accounts.user.key;
+            saled_amount.amount = 0;    
+        }
+
+        // check authority
+        require_keys_eq!(
+            ctx.accounts.user.key(),
+            ctx.accounts.saled_amount.user,
+            ErrorCode::Unauthorized
+        );
 
         require_keys_eq!(
             ctx.accounts.recipent.key(), 
-            Pubkey::from_str("4FSwJ68KUcUjUSj9xqqXDhZQqidxJQ8R8PrKuQLs5RSp").unwrap(), 
+            Pubkey::from_str(RECEIVER_ADDRESS).unwrap(), 
             ErrorCode::UnmatchedRecipent
         );
 
@@ -207,28 +205,34 @@ pub struct SetSale<'info>{
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-pub struct Create<'info> {
-    #[account(
-        init, 
-        payer = user, 
-        space = 8 + SaledAmount::INIT_SPACE,
-        seeds = [b"sale", user.key().as_ref()],
-        bump
-    )]
-    pub saled_account: Account<'info, SaledAmount>,
-    #[account(mut)]
-    pub mint_token: Account<'info, token::Mint>,
-    #[account(mut)]
-    pub user: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+// #[derive(Accounts)]
+// pub struct Create<'info> {
+//     #[account(
+//         init_if_needed, 
+//         payer = user, 
+//         space = 8 + SaledAmount::INIT_SPACE,
+//         seeds = [b"sale", user.key().as_ref()],
+//         bump
+//     )]
+//     pub saled_account: Account<'info, SaledAmount>,
+//     #[account(mut)]
+//     pub mint_token: Account<'info, token::Mint>,
+//     #[account(mut)]
+//     pub user: Signer<'info>,
+//     pub system_program: Program<'info, System>,
+// }
 
 #[derive(Accounts)]
 pub struct Buy<'info> {
     #[account(mut)]
     pub mint: Account<'info, Mint>,
-    #[account(mut, has_one = user)]
+    #[account(
+        init_if_needed, 
+        payer = user, 
+        space = 8 + SaledAmount::INIT_SPACE,
+        seeds = [b"sale", user.key().as_ref()],
+        bump
+    )]
     pub saled_amount: Account<'info, SaledAmount>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -246,14 +250,12 @@ pub struct Buy<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Withdraw<'info> {
+pub struct BurnPresale<'info> {
     /// Payer of rent
     #[account(mut)]
     pub payer: Signer<'info>,
     #[account(mut)]
     pub mint: Account<'info, Mint>,
-    #[account(mut)]
-    pub recipent_token_account: Box<Account<'info, TokenAccount>>,
     #[account(mut)]
     pub pool: Account<'info, Pool>,
     #[account(mut)]
