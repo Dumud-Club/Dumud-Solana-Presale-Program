@@ -20,6 +20,8 @@
 3. User can't withdraw presale balance.
 
 # Initialize Vault
-`anchor run initVault -- --mint mintKey --controller controllerPrivateKey`
+`anchor run initVault -- --mint <mintKey> --controller <controllerPrivateKey>`
 # to get controller's privateKey
-`anchor run privateKey -- --path controllerKeyPath`
+`anchor run privateKey -- --path <controllerKeyPath>`
+# buy token
+`anchor run buy -- --mint <mintKey> --user <userPrivateKey> --controller <controllerPrivateKey> --amount <amountInLamports> --receiver <receiverPublicKey>`
