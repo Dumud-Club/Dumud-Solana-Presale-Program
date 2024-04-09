@@ -18,3 +18,8 @@
 1. User can't initalize presale of which token is not created by him.
 2. User can't start or stop presale.
 3. User can't withdraw presale balance.
+
+# Initialize Vault
+`anchor run initVault -- --mint mintKey --controller controllerPrivateKey`
+# to get controller's privateKey
+`anchor run privateKey -- --path controllerKeyPath`

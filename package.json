@@ -5,7 +5,10 @@
     },
     "dependencies": {
         "@coral-xyz/anchor": "^0.29.0",
-        "@solana/spl-token": "^0.4.3"
+        "@solana/spl-token": "^0.4.3",
+        "bs58": "^5.0.0",
+        "ts-node": "^10.9.2",
+        "yargs": "^17.7.2"
     },
     "devDependencies": {
         "@types/bn.js": "^5.1.0",
