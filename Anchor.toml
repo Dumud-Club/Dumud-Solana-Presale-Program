@@ -5,17 +5,25 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-presale_contract = "A4DjbJ7AVgKCcWAZpFZPUmVQvgcAEcJwGtrxGrhEHZYP"
+presale_contract = "FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ"
+[programs.devnet]
+presale_contract = "FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ"
+[programs.testnet]
+presale_contract = "FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+#cluster = "Localnet"
+cluster = "devnet"
+#cluster = "testnet"
 wallet = "/home/rss/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 buy = "yarn run ts-node scripts/buy.ts"
-initVault = "yarn run ts-node scripts/initVault.ts"
-privateKey = "yarn run ts-node scripts/privateKey.ts"
+init-vault = "yarn run ts-node scripts/init_vault.ts"
+#buy = "yarn run ts-node scripts/buy_on_dev.ts"
+#init-vault = "yarn run ts-node scripts/init_vault_on_dev.ts"
+private-key = "yarn run ts-node scripts/private_key.ts"

@@ -69,14 +69,16 @@ describe("presale-contract", () => {
 
     userTokenKey = await createAccount(
       provider.connection,
-      controller,
+      // controller,
+      user,
       mintKey,
       user.publicKey
     );
 
     receiverTokenKey = await createAccount(
       provider.connection,
-      controller,
+      // controller,
+      user,
       mintKey,
       receiverPubkey
     );
@@ -485,7 +487,8 @@ describe("presale-contract", () => {
     );
     const userATokenKey = await createAccount(
       provider.connection,
-      controller,
+      userA,
+      // controller,
       mintKey,
       userA.publicKey
     );
@@ -506,7 +509,8 @@ describe("presale-contract", () => {
     );
     const userBTokenKey = await createAccount(
       provider.connection,
-      controller,
+      userB,
+      // controller,
       mintKey,
       userB.publicKey
     );

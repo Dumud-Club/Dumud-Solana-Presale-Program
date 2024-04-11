@@ -15,5 +15,6 @@ const argv = yargs.options({
 const rawPayerKeypair = JSON.parse(fs.readFileSync(argv.path, "utf-8"));
 const payerKeypair = anchor.web3.Keypair.fromSecretKey(Buffer.from(rawPayerKeypair));
 
-console.log(bs58.encode(payerKeypair.secretKey));
+console.log(`privateKey ${bs58.encode(payerKeypair.secretKey)}`);
+console.log(`publicKey ${payerKeypair.publicKey}`);
 

@@ -1,7 +1,7 @@
 import * as yargs from "yargs";
 import * as bs58 from "bs58";
 import * as anchor from "@coral-xyz/anchor";
-import { PresaleContract } from "../target/types/presale_contract";
+import { IDL, PresaleContract } from "../target/types/presale_contract";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 // Configure client to use the provider.
@@ -11,8 +11,15 @@ const init = async () => {
 
   anchor.setProvider(provider);
 
-  const presaleProgram = anchor.workspace
-    .PresaleContract as anchor.Program<PresaleContract>;
+  const presaleProgramId = new anchor.web3.PublicKey(
+    "FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ"
+  );
+
+  const presaleProgram = new anchor.Program<PresaleContract>(
+    IDL,
+    presaleProgramId,
+    provider
+  );
 
   const argv = yargs.options({
     mint: {

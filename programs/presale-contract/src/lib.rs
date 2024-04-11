@@ -2,7 +2,7 @@ use std::str::FromStr;
 use anchor_lang::{prelude::*, solana_program::{self, native_token::LAMPORTS_PER_SOL}};
 use anchor_spl::token::{self, Transfer, TokenAccount, Token, Mint, Burn};
 
-declare_id!("A4DjbJ7AVgKCcWAZpFZPUmVQvgcAEcJwGtrxGrhEHZYP");
+declare_id!("FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ");
 
 const TOKENS_PER_USER: u64 = 75_000 * LAMPORTS_PER_SOL; // for 3 SOL
 const TOKENS_PER_SOL: u64 = 25_000 * LAMPORTS_PER_SOL;
