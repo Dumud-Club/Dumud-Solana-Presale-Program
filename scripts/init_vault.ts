@@ -4,15 +4,13 @@ import * as anchor from "@coral-xyz/anchor";
 import { IDL, PresaleContract } from "../target/types/presale_contract";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-// Configure client to use the provider.
-
 const init = async () => {
   const provider = anchor.AnchorProvider.env();
 
   anchor.setProvider(provider);
 
   const presaleProgramId = new anchor.web3.PublicKey(
-    "FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ"
+    "DdMxyt8aCdufZgnZXcjRNzoy3VaNQmVRn7ioxCdwMuZf" // ProgramID
   );
 
   const presaleProgram = new anchor.Program<PresaleContract>(
