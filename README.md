@@ -1,27 +1,30 @@
 # Presale contract for $DUMUD
-1. Owner can deposit the amount of token for presale from their wallet.
-2. Users can deposit $SOL which will be limited to 3 $SOL and receive up to 75,000 $DUMUD.
-3. Extra $SOL should be returned to the user.
-4. Deposited $SOL should be transferred to the owner automatically.
-5. When there isn't enough $DUMUD, send remaining $DUMUD left in the contract and refund extra $SOL to the user.
-6. Users can buy $DUMUD through several transactions, but total $SOL can't be exceeded by 3 $SOL.
+1. Controller can deposit the amount of tokens for presale.
+2. Users can deposit $SOL which will be limited to 10 $SOL / 250,000 $DUMUD.
+3. Extra $SOL past limits will not be accounted for and be affected.
+4. Deposited $SOL should be transferred to the specified receiver address automatically.
+5. When there isn't enough $DUMUD compared to the amount User wants to purchase, program will only calculate based on the remaining Dumud (if still under purchase limits).
+6. Each wallet can buy $DUMUD through multiple transactions, but total $SOL cannot exceed 10 $SOL.
 
 # Workflow & Authority
 ## Prepare presale by owner
-1. Owner create a new token($DUMUD).
-2. Owner initialize presale for a specific token.
-3. Owner can start or stop presale.
-4. Owner cannot withdraw any tokens, only burn.
+1. Controller creates a new token($DUMUD).
+2. Controller initialize presale for specific token.
+3. Controller can start or stop presale.
+4. Controller cannot withdraw any tokens, only burn remaining presale tokens.
+   
 ## Presale
-1. User can buy tokens with some SOL limited by cap in a transaction or a few transactions as they want.
+1. User can buy tokens with SOL limited by purchase cap in a transaction or in multiple transactions.
+   
 ## Authorization
-1. User can't initalize presale of which token is not created by him.
-2. User can't start or stop presale.
-3. User can't withdraw presale balance.
+1. Controller can't initialize a presale of which token is not created by the Controller.
+2. Users cannot initialize a presale.
+3. Users cannot start or stop presale.
+4. Presale Token Balance is not withdrawable, only can be burnt which the Controller has Authority.
 
 # Initialize Vault
-`anchor run initVault -- --mint <mintKey> --controller <controllerPrivateKey>`
-# to get controller's privateKey
+`anchor run initVault -- --mint <TokenMintAddress> --controller <ControllerPrivateKey>`
+# to get controller's privateKey from a JSON
 `anchor run privateKey -- --path <controllerKeyPath>`
 # buy token
-`anchor run buy -- --mint <mintKey> --user <userPrivateKey> --controller <controllerPrivateKey> --amount <amountInLamports> --receiver <receiverPublicKey>`
+`anchor run buy --user <UserPrivateKey> --amount <AmountInLamports>`
