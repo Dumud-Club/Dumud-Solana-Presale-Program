@@ -1,11 +1,11 @@
-import * as yargs from "yargs";
-import * as bs58 from "bs58";
 import * as anchor from "@coral-xyz/anchor";
-import { IDL, PresaleContract } from "../target/types/presale_contract";
 import {
   TOKEN_PROGRAM_ID,
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
+import { keyPairFromSecretKey, airdrop } from "./utils";
+import { IDL, PresaleContract } from "../target/types/presale_contract";
+import * as yargs from "yargs";
 
 // Configure client to use the provider.
 
@@ -15,7 +15,7 @@ const buyToken = async () => {
   anchor.setProvider(provider);
 
   const presaleProgramId = new anchor.web3.PublicKey(
-    "FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ"
+    "DdMxyt8aCdufZgnZXcjRNzoy3VaNQmVRn7ioxCdwMuZf" // ProgramID
   );
 
   const presaleProgram = new anchor.Program<PresaleContract>(
@@ -24,55 +24,50 @@ const buyToken = async () => {
     provider
   );
 
-  const argv = yargs.options({
-    mint: {
-      alias: "m",
-      demandOption: true,
-      description: "mint publicKey",
-    },
-    user: {
-      alias: "u",
-      demandOption: true,
-      description: "user privateKey",
-    },
-    controller: {
-      alias: "c",
-      demandOption: true,
-      description: "controller publicKey",
-    },
-    amount: {
+  const argv = yargs
+    .option("amount", {
       alias: "a",
+      description: "Amount of SOL to spend",
+      type: "number",
       demandOption: true,
-      description: "amount of SOL",
-    },
-    receiver: {
-      alias: "r",
-      demandOption: true,
-      description: "receiver publicKey",
-    },
-  }).argv;
+    })
+    .argv;
+
+  const controllerPubkey = new anchor.web3.PublicKey(
+    "6PCADjhaC76Q9EZXtizRsADLTsw8Zs2gpmuq1v1pbBjQ" // Controller Address
+  );
+
+  const user = keyPairFromSecretKey("/home/zeroex/.config/solana/Controller.json");
+  const recipientPubkey = new anchor.web3.PublicKey(
+    "2QQAXmtsbRyG5NBbPKfrpMCi6NHHaumLbQTTBEwGvwZP" // Solana Receiver Address
+  );
+
+  console.log(`controller: ${controllerPubkey}`);
+  console.log(`user: ${user.publicKey}`);
+  console.log(`recipient: ${recipientPubkey}`);
+
+  const mintKey: anchor.web3.PublicKey = new anchor.web3.PublicKey(
+    "3RvnZHQtTc2uM7SpexTTUErhv6qFQeTRy4EdRfFwHK4C" // Token Mint Address
+  );
 
   let poolKey, vaultKey, saleUserKey, userTokenKey;
   const poolSeed = anchor.utils.bytes.utf8.encode("pool");
   const vaultSeed = anchor.utils.bytes.utf8.encode("vault");
   const saleSeed = anchor.utils.bytes.utf8.encode("sale");
-  const mintKey: anchor.web3.PublicKey = new anchor.web3.PublicKey(argv.mint);
-  const user = anchor.web3.Keypair.fromSecretKey(bs58.decode(argv.user));
-  const controllerPubKey = new anchor.web3.PublicKey(argv.controller);
 
   [poolKey] = await anchor.web3.PublicKey.findProgramAddressSync(
-    [poolSeed, controllerPubKey.toBuffer(), mintKey.toBuffer()],
-    presaleProgram.programId
+    [poolSeed, controllerPubkey.toBuffer(), mintKey.toBuffer()],
+    presaleProgramId
   );
 
   [vaultKey] = await anchor.web3.PublicKey.findProgramAddressSync(
     [vaultSeed, poolKey.toBuffer()],
-    presaleProgram.programId
+    presaleProgramId
   );
 
   [saleUserKey] = await anchor.web3.PublicKey.findProgramAddressSync(
     [saleSeed, user.publicKey.toBuffer()],
-    presaleProgram.programId
+    presaleProgramId
   );
 
   userTokenKey = await getOrCreateAssociatedTokenAccount(
@@ -83,15 +78,49 @@ const buyToken = async () => {
   );
 
   console.log(
+    `user token ATA ${userTokenKey.address} user token owner ${userTokenKey.owner}`
+  );
+
+  console.log(
     `please transfer presale token to [vaultKey]: ${vaultKey.toBase58()}`
   );
 
-  const poolAccount = await presaleProgram.account.pool.fetch(poolKey);
-  console.log(`Pool AccountInfo ${poolAccount}`);
   let vaultBalance = await provider.connection.getTokenAccountBalance(vaultKey);
   console.log(`Vault Balance ${vaultBalance.value.uiAmount}`);
+  console.log(
+    `User balance: ${
+      (await provider.connection.getBalance(user.publicKey)) /
+      anchor.web3.LAMPORTS_PER_SOL
+    } SOL`
+  );
+  let userTokenBalance = await provider.connection.getTokenAccountBalance(
+    userTokenKey.address
+  );
+  console.log(`User Token Balance ${userTokenBalance.value.uiAmount}`);
+  let recipientBalance = await provider.connection.getBalance(recipientPubkey);
+  console.log(`Recipient Balance ${recipientBalance}`);
 
-  await buy(user, saleUserKey, userTokenKey.address, argv.amount);
+  await buy(
+    user,
+    saleUserKey,
+    userTokenKey.address,
+    new anchor.BN(argv.amount * anchor.web3.LAMPORTS_PER_SOL)
+  );
+
+  vaultBalance = await provider.connection.getTokenAccountBalance(vaultKey);
+  console.log(`Vault Balance ${vaultBalance.value.uiAmount}`);
+  console.log(
+    `User balance: ${
+      (await provider.connection.getBalance(user.publicKey)) /
+      anchor.web3.LAMPORTS_PER_SOL
+    } SOL`
+  );
+  recipientBalance = await provider.connection.getBalance(recipientPubkey);
+  console.log(`Recipient Balance ${recipientBalance}`);
+  userTokenBalance = await provider.connection.getTokenAccountBalance(
+    userTokenKey.address
+  );
+  console.log(`User Token Balance ${userTokenBalance.value.uiAmount}`);
 
   async function buy(
     user: anchor.web3.Keypair,
@@ -106,7 +135,7 @@ const buyToken = async () => {
         saledAmount: saleUserKey,
         user: user.publicKey,
         userTokenAccount: userTokenKey,
-        recipent: argv.receiverPubkey,
+        recipent: recipientPubkey,
         pool: poolKey,
         vault: vaultKey,
         tokenProgram: TOKEN_PROGRAM_ID,
