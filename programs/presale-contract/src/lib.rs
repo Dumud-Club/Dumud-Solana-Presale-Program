@@ -1,12 +1,19 @@
+// Dumud Whale Club's Presale Program 
+// Declare the ProgramID, Purchase Limits, Conversation Rate, Solana Receiver Account, and Program Controller Account
+// Controller Creates & Initiliazes Presale Vault Pool
+// Vault Creation checks signer to be the Controller & also the token minter (Warning: Do not revoke token mint authority until vault is created!)
+
+
 use std::str::FromStr;
 use anchor_lang::{prelude::*, solana_program::{self, native_token::LAMPORTS_PER_SOL}};
 use anchor_spl::token::{self, Transfer, TokenAccount, Token, Mint, Burn};
 
-declare_id!("FrByURbsBpBQRVhZW5FJ1TYnqwbMLNJA7tJzSV4UKhZZ");
+declare_id!("DdMxyt8aCdufZgnZXcjRNzoy3VaNQmVRn7ioxCdwMuZf"); // programid
 
-const TOKENS_PER_USER: u64 = 75_000 * LAMPORTS_PER_SOL; // for 3 SOL
-const TOKENS_PER_SOL: u64 = 25_000 * LAMPORTS_PER_SOL;
-const RECEIVER_ADDRESS: &str = "4FSwJ68KUcUjUSj9xqqXDhZQqidxJQ8R8PrKuQLs5RSp";
+const TOKENS_PER_USER: u64 = 250_000 * LAMPORTS_PER_SOL; // for 10 SOL Purchase Limit
+const TOKENS_PER_SOL: u64 = 25_000 * LAMPORTS_PER_SOL; // conversion rate 1 SOL = 25000 Tokens
+const RECEIVER_ADDRESS: &str = "2QQAXmtsbRyG5NBbPKfrpMCi6NHHaumLbQTTBEwGvwZP"; // Solana receiver address
+const CONTROLLER_ADDRESS: &str = "6PCADjhaC76Q9EZXtizRsADLTsw8Zs2gpmuq1v1pbBjQ"; // Program controller address
 
 #[program]
 pub mod presale_contract {
@@ -21,20 +28,20 @@ pub mod presale_contract {
         pool.owner = *ctx.accounts.payer.key;
         pool.mint = ctx.accounts.mint.key();
         pool.bump_seed = ctx.bumps.pool;
-        pool.sale_enabled = true;
+        pool.sale_enabled = false; // By Default, Sale is Not Started Upon Pool Creation 
         Ok(())
     }
 
     pub fn set_sale(ctx: Context<SetSale>, new_value: bool) -> Result<()> {
+        require_keys_eq!(*ctx.accounts.payer.key, Pubkey::from_str(CONTROLLER_ADDRESS).unwrap(), ErrorCode::Unauthorized);
         let pool = &mut ctx.accounts.pool;
         pool.sale_enabled = new_value;
         Ok(())
     }
 
     pub fn burn(ctx: Context<BurnPresale>) -> Result<()> {
-
+        require_keys_eq!(*ctx.accounts.payer.key, Pubkey::from_str(CONTROLLER_ADDRESS).unwrap(), ErrorCode::Unauthorized);
         require!(!ctx.accounts.pool.sale_enabled, ErrorCode::SaleAvailable);
-
         require!(ctx.accounts.vault.amount > 0, ErrorCode::VaultIsEmpty);        
 
         let cpi_accounts = Burn {
@@ -55,24 +62,16 @@ pub mod presale_contract {
         Ok(())
     }
 
-    // pub fn init_user(ctx: Context<Create>) -> Result<()> {
-    //     let saled_amount = &mut ctx.accounts.saled_account;
-    //     saled_amount.user = *ctx.accounts.user.key;
-    //     saled_amount.amount = 0;        
-
-    //     Ok(())
-    // }
-
     pub fn buy(ctx: Context<Buy>, amount: u64) -> Result<()> {
 
-        // if saled_amount isn't initialized, initialize it.
+        // If saled_amount isn't Initialized, Initialize it.
         let saled_amount = &mut ctx.accounts.saled_amount;
         if saled_amount.user == Pubkey::from_str("11111111111111111111111111111111").unwrap() {
             saled_amount.user = *ctx.accounts.user.key;
             saled_amount.amount = 0;    
         }
 
-        // check authority
+        // Check Authority
         require_keys_eq!(
             ctx.accounts.user.key(),
             ctx.accounts.saled_amount.user,
@@ -95,7 +94,7 @@ pub mod presale_contract {
 
         let saled_amount = &mut ctx.accounts.saled_amount;
 
-        // 1. check if it's availalbe to sell(sol balance and remained amount are valid)        
+        // 1. Check if it's availalbe to sell(sol balance & remained amount are valid)        
         if saled_amount.amount >= TOKENS_PER_USER {
             return Err(ErrorCode::SaleFull.into());
         }
@@ -106,12 +105,12 @@ pub mod presale_contract {
         real_amount = if ctx.accounts.vault.amount >= real_amount { real_amount } else {ctx.accounts.vault.amount};
         let extra_amount: u64 = (requested_amount - real_amount) / (TOKENS_PER_SOL / LAMPORTS_PER_SOL);
 
-        // 2. update status(saled.amount)
+        // 2. Update Status(saled.amount)
         {
             saled_amount.amount += real_amount;    
         }
         
-        // 3. receive native token from user as needed
+        // 3. Receive Solana from user as needed
         {        
             let transfer_instruction = system_instruction::transfer(
                 &ctx.accounts.saled_amount.user,
@@ -129,7 +128,7 @@ pub mod presale_contract {
             )?;
         }
 
-        // 4. send spl token(real_amount) to user
+        // 4. Send SPL Token(real_amount) to user
         {
             let cpi_accounts = Transfer {
                 from: ctx.accounts.vault.to_account_info(),
@@ -205,23 +204,6 @@ pub struct SetSale<'info>{
     pub system_program: Program<'info, System>,
 }
 
-// #[derive(Accounts)]
-// pub struct Create<'info> {
-//     #[account(
-//         init_if_needed, 
-//         payer = user, 
-//         space = 8 + SaledAmount::INIT_SPACE,
-//         seeds = [b"sale", user.key().as_ref()],
-//         bump
-//     )]
-//     pub saled_account: Account<'info, SaledAmount>,
-//     #[account(mut)]
-//     pub mint_token: Account<'info, token::Mint>,
-//     #[account(mut)]
-//     pub user: Signer<'info>,
-//     pub system_program: Program<'info, System>,
-// }
-
 #[derive(Accounts)]
 pub struct Buy<'info> {
     #[account(mut)]
@@ -268,9 +250,9 @@ pub struct BurnPresale<'info> {
 pub enum ErrorCode {
     #[msg("You are not authorized to perform this action.")]
     Unauthorized,
-    #[msg("Your sale is full")]
+    #[msg("You have reached your maximum buy capacity of 10 $SOL")]
     SaleFull,
-    #[msg("Not enough native token")]
+    #[msg("Not enough $SOL")]
     NotEnoughSol,
     #[msg("Recipent doesn't match")]
     UnmatchedRecipent,
@@ -280,7 +262,7 @@ pub enum ErrorCode {
     SaleNotAvailable,
     #[msg("Sale is available")]
     SaleAvailable,
-    #[msg("Vault is empty")]
+    #[msg("Vault is empty! Presale has been sold out!")]
     VaultIsEmpty,
 }
 
